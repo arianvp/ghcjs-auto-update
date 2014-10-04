@@ -13,11 +13,11 @@ import System.IO hiding (Handle)
 
 newtype Handle = Handle (JSRef Handle)
 
-foreign import javascript unsafe "raf"
+foreign import javascript unsafe "requestAnimationFrame"
   js_requestAnimationFrame :: JSFun (IO ()) -> IO Handle
 
 
-foreign import javascript unsafe "raf.cancel($1)"
+foreign import javascript unsafe "cancelAnimationFrame($1)"
   js_cancelAnimationFrame :: Handle -> IO ()
 
 
