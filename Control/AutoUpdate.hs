@@ -9,7 +9,10 @@ import          Control.Concurrent.MVar       (newEmptyMVar, putMVar, readMVar,
 import          Control.Exception             (SomeException, catch, throw)
 import          Data.IORef                    (newIORef, readIORef, writeIORef)
 
-import          Control.AutoUpdate.Util       (waitForAnimationFrame)
+import          Control.AutoUpdate.Util       (cb, handle ,waitForAnimationFrame, requestAnimationFrame, cancelAnimationFrame)
+
+import          GHCJS.Foreign
+import          System.IO
 
 mkAutoUpdate :: IO a -> IO (IO a)
 mkAutoUpdate ua = do
@@ -23,21 +26,18 @@ mkAutoUpdate ua = do
   void $ forkIO $ forever $ do
     -- block until a value is actually needed.
     takeMVar needsRunning
-    
-    a <- catchSome ua
-    
-    writeIORef currRef $ Just a
-    void $ tryTakeMVar lastValue
-    putMVar lastValue a
 
-    -- delay until we're needed again
-    waitForAnimationFrame
-
-    -- delay's over, clear out currRef andd lastValue so that demanding the
-    -- value again forces us to start work
-    writeIORef currRef Nothing
+    h <- fixIO $ \h -> requestAnimationFrame $ do
+      a <- catch ua $ \e -> do
+       cancelAnimationFrame h
+       return $ throw (e :: SomeException)
+      writeIORef currRef $ Just a
+      void $ tryTakeMVar lastValue
+      putMVar lastValue a
+      writeIORef currRef Nothing
     void $ takeMVar lastValue
-  
+    release $ cb h
+
   return $ do
     mval <- readIORef currRef
     case mval of
@@ -45,11 +45,4 @@ mkAutoUpdate ua = do
       Nothing  -> do
         void $ tryPutMVar needsRunning ()
         readMVar lastValue
-
-
--- | Turn a runtime exception into an impure exception, so that all @IO@
--- actions will complete successfully. This simply defers the exception until
---  the value is forced.
-catchSome :: IO a -> IO a
-catchSome act = Control.Exception.catch act $ \e -> return $ throw (e :: SomeException)
 

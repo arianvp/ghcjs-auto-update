@@ -2,6 +2,8 @@ module Control.AutoUpdate.Util
 ( requestAnimationFrame
 , cancelAnimationFrame
 , waitForAnimationFrame
+, handle
+, cb
 )
 
 where
@@ -21,16 +23,16 @@ foreign import javascript unsafe "cancelAnimationFrame($1)"
   js_cancelAnimationFrame :: Handle -> IO ()
 
 
-newtype AnimationFrameHandle  = AnimationFrameHandle (Handle, JSFun (IO ()))
+data AnimationFrameHandle  = AnimationFrameHandle { handle :: Handle, cb :: JSFun (IO ())}
 
 requestAnimationFrame :: IO () -> IO AnimationFrameHandle
 requestAnimationFrame x = do
     cb <- fixIO $ \cb -> syncCallback AlwaysRetain True (release cb >> x)
     h <- js_requestAnimationFrame cb
-    return $ AnimationFrameHandle (h, cb)
+    return $ AnimationFrameHandle h cb
 
 cancelAnimationFrame :: AnimationFrameHandle -> IO ()
-cancelAnimationFrame (AnimationFrameHandle (h, cb)) =
+cancelAnimationFrame (AnimationFrameHandle h cb) =
   release cb >> js_cancelAnimationFrame h
 
 
@@ -40,3 +42,4 @@ waitForAnimationFrame = do
   v <- newEmptyMVar
   requestAnimationFrame $ putMVar v ()
   takeMVar v
+
